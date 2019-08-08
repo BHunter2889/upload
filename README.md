@@ -32,7 +32,7 @@ your credentials and other environment variables for your respective platforms.
 This is used primarily to trim down the produced binary size and implement best practices.
 Build this util simply by executing `make build` .
 
-## Add as a standard CLI Command:
+## Invoke from anywhere as a CLI Command:
 - Copy the produced binary to a `/bin` somewhere on your path (i.e. `~/bin`).
     - **example:** `$ cp upload ~/bin/upload`
     
