@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"github.com/spf13/cobra"
 	"gocloud.dev/blob"
 	// Import blank GoCDK blob impls for desired platform.
 	_ "gocloud.dev/blob/azureblob"
@@ -13,15 +14,34 @@ import (
 	"os"
 )
 
+var ctx context.Context
+
 func main() {
+	ctx = context.Background();
+	uploadCmd := &cobra.Command{
+		Use:   "upload BUCK",
+		Short: "upload is a util to upload to any cloud platform storage bucket provider",
+		Long:  `A convenient cli util to upload objects to bucket storage in AWS, GCP, or Azure. 
+				Written by BHunter2889 in Go, based off the Go CDK upload tutorial.`,
+		Args: cobra.MinimumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			upload(ctx, args[0], args[1])
+		},
+	}
+
+	err := uploadCmd.Execute()
+	if err != nil {
+		log.Fatal("upload command failed to execute: ", err)
+	}
+
 	//	Define Input
 	if len(os.Args) != 3 {
 		log.Fatal("usage: upload BUCKET_URL FILE")
 	}
-	bucketURL := os.Args[1]
-	file := os.Args[2]
-	ctx := context.Background()
 
+}
+
+func upload(ctx context.Context, bucketURL string, file string) {
 	//	Open Bucket Connection
 	bucket, err := blob.OpenBucket(ctx, bucketURL)
 	if err != nil {
