@@ -1,6 +1,10 @@
 # `upload`
-
 #### A CLI util for uploading documents to bucket storage on AWS, GCP, or Azure cloud platforms.
+
+<br>
+
+##*Needs Updated for `s3`, `gcs`, and `azure` subcommands*
+<br>
 
 ## Usage
 ##### uploads `1904logo.png` to **GCS**
