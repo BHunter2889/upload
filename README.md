@@ -3,7 +3,7 @@
 
 <br>
 
-##*Needs Updated for `s3`, `gcs`, and `azure` subcommands*
+## *Needs Updated for `s3`, `gcs`, and `azure` subcommands*
 <br>
 
 ## Usage
