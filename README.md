@@ -42,3 +42,4 @@ Build this util simply by executing `make build` .
     
 ## Credit
 - *This is taken from the [Go CDK Tutorial](https://gocloud.dev/tutorials/cli-uploader/). This repo has been modified from the tutorial example to streamline the usage and provide additional explanation.*
+- Extended to introduce subcommands for each CNP as well as `help` & `-h` command features using the [Cobra CLI framework](https://github.com/spf13/cobra).
