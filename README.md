@@ -1,22 +1,42 @@
 # `upload`
 #### A CLI util for uploading documents to bucket storage on AWS, GCP, or Azure cloud platforms.
-
-<br>
-
-##*Needs Updated for `s3`, `gcs`, and `azure` subcommands*
 <br>
 
 ## Usage
 ##### uploads `1904logo.png` to **GCS**
-`$ upload 'gs://your-cnp-bucket' 1904logo.png` 
+`$ upload 'gs://your-cnp-bucket' 1904logo.png`
+<br>
+or
+<br>
+`$ upload gcs 'your-cnp-bucket' 1904logo.png`
 <br>
 <br>
 ##### uploads `1904logo.png` to **S3**
 `$ upload 's3://your-cnp-bucket' 1904logo.png`
 <br>
+or
+<br>
+`$ upload s3 'your-cnp-bucket' 1904logo.png`
+<br>
+or
+<br>
+`$ upload s3 'your-cnp-bucket' 1904logo.png -r 'us-east-1'`
+<br>
 <br>
 ##### uploads `1904logo.png` to **Azure**
 `$ upload 'azblob://your-cnp-bucket' 1904logo.png`
+<br>
+or
+<br>
+`$ upload azure 'your-cnp-bucket' 1904logo.png`
+<br>
+<br>
+#### help
+`$ upload`
+<br>
+`$ upload -h`
+<br>
+`$ upload help s3`
 <br>
 <br>
 ## Prerequisites
@@ -42,3 +62,4 @@ Build this util simply by executing `make build` .
     
 ## Credit
 - *This is taken from the [Go CDK Tutorial](https://gocloud.dev/tutorials/cli-uploader/). This repo has been modified from the tutorial example to streamline the usage and provide additional explanation.*
+- Extended to introduce subcommands for each CNP as well as `help` & `-h` command features using the [Cobra CLI framework](https://github.com/spf13/cobra).
