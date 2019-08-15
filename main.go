@@ -96,6 +96,36 @@ func main() {
 		},
 	}
 
+	allSubCmd := &cobra.Command{
+		Use:   "all 'BUCKET_NAME' FILE",
+		Short: "The 'all' subcommand auto-constructs the routes to all 3 platforms to the named bucket using the respective env vars.",
+		Long: `The 'all'' subcommand auto-constructs the routes to AWS S3, GCS, and Azure named bucket/container using the configured ` +
+			` environment variables. Bucket/container must have same name across all 3 platforms for standard (non-flagged) usage.`,
+		Args: cobra.MinimumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			// TODO:  ***** Make this upload to ALL platforms. *****
+			uploader := uploaderBuilder{
+				platformPrefix: s3Prefix,
+				awsRegion:      awsRegion,
+				bucketName:     args[0],
+				fileName:       args[1],
+			}
+			uploader.buildAndUpload(ctx)
+		},
+	}
+
+	allSubCmd.Flags().StringVarP(
+		&awsRegion,
+		"region",
+		"r",
+		"",
+		"The AWS Region where the named bucket is located. "+
+			"Overrides any default region previously set.")
+
+	// TODO: ***** Add subcmd flags to all to enable individually named buckets. *****
+	// TODO: ***** Add subcmd flags to all to enable exclusion of a platform. *****
+	// TODO: ***** CONSIDER: Add flags to root upload to enable platform specification and individual naming. *****
+
 	uploadCmd.AddCommand(s3SubCmd, gcsSubCmd, azSubCmd)
 	err := uploadCmd.Execute()
 	if err != nil {
