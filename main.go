@@ -19,11 +19,13 @@ const (
 	s3Prefix    = "s3"
 	gcpPrefix   = "gs"
 	azurePrefix = "azblob"
+	localPrefix = "file"
 )
 
 var (
-	ctx       context.Context
-	awsRegion string
+	ctx             context.Context
+	awsRegion       string
+	localBucketPath string
 )
 
 func main() {
@@ -47,13 +49,7 @@ func main() {
 			`(or optionally provided) AWS environment variables.`,
 		Args: cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			uploader := uploaderBuilder{
-				platformPrefix: s3Prefix,
-				awsRegion:      awsRegion,
-				bucketName:     args[0],
-				fileName:       args[1],
-			}
-			uploader.buildAndUpload(ctx)
+			s3(ctx, args[0], args[1])
 		},
 	}
 
@@ -71,12 +67,7 @@ func main() {
 		Long:  `The gcs subcommand auto-constructs the GCP GCS route to the named bucket using the gcloud configuration. `,
 		Args:  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			uploader := uploaderBuilder{
-				platformPrefix: gcpPrefix,
-				bucketName:     args[0],
-				fileName:       args[1],
-			}
-			uploader.buildAndUpload(ctx)
+			gcp(ctx, args[0], args[1])
 		},
 	}
 
@@ -87,12 +78,18 @@ func main() {
 			`AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY environment variable configuration.`,
 		Args: cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			uploader := uploaderBuilder{
-				platformPrefix: azurePrefix,
-				bucketName:     args[0],
-				fileName:       args[1],
-			}
-			uploader.buildAndUpload(ctx)
+			azure(ctx, args[0], args[1])
+		},
+	}
+
+	localSubCmd := &cobra.Command{
+		Use:   "local PATH_TO_BUCKET FILE",
+		Short: "The local subcommand locally 'uploads' FILE to PATH_TO_BUCKET.",
+		Long: `The local subcommand 'uploads' FILE to the local filesystem path defined by PATH_TO_BUCKET. ` +
+			`This is mainly useful for testing purposes but could be used in place of the 'cp' command, for example.`,
+		Args: cobra.MinimumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			local(ctx, args[0], args[1])
 		},
 	}
 
@@ -103,14 +100,7 @@ func main() {
 			` environment variables. Bucket/container must have same name across all 3 platforms for standard (non-flagged) usage.`,
 		Args: cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			// TODO:  ***** Make this upload to ALL platforms. *****
-			uploader := uploaderBuilder{
-				platformPrefix: s3Prefix,
-				awsRegion:      awsRegion,
-				bucketName:     args[0],
-				fileName:       args[1],
-			}
-			uploader.buildAndUpload(ctx)
+			all(ctx, args[0], args[1])
 		},
 	}
 
@@ -122,11 +112,19 @@ func main() {
 		"The AWS Region where the named bucket is located. "+
 			"Overrides any default region previously set.")
 
+	allSubCmd.Flags().StringVarP(
+		&localBucketPath,
+		"local",
+		"l",
+		"",
+		"Also upload locally. The provided argument is the `PATH_TO_BUCKET` locally. "+
+			"See `upload local --help` for the same usage.")
+
 	// TODO: ***** Add subcmd flags to all to enable individually named buckets. *****
 	// TODO: ***** Add subcmd flags to all to enable exclusion of a platform. *****
 	// TODO: ***** CONSIDER: Add flags to root upload to enable platform specification and individual naming. *****
 
-	uploadCmd.AddCommand(s3SubCmd, gcsSubCmd, azSubCmd)
+	uploadCmd.AddCommand(s3SubCmd, gcsSubCmd, azSubCmd, localSubCmd)
 	err := uploadCmd.Execute()
 	if err != nil {
 		log.Fatal("upload command failed to execute: ", err)
@@ -134,27 +132,50 @@ func main() {
 }
 
 func s3(ctx context.Context, bucket string, file string) {
-	var bucketUrl string
-
-	if awsRegion != "" {
-		regionQuery := fmt.Sprintf("?region=%s", awsRegion)
-		bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, bucket+regionQuery)
-	} else {
-		bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, bucket)
+	uploader := uploaderBuilder{
+		platformPrefix: s3Prefix,
+		awsRegion:      awsRegion,
+		bucketName:     bucket,
+		fileName:       file,
 	}
-	upload(ctx, bucketUrl, file)
+	uploader.buildAndUpload(ctx)
 }
 
 func gcp(ctx context.Context, bucket string, file string) {
-	var bucketUrl string
-	bucketUrl = fmt.Sprintf(urlTemplate, gcpPrefix, bucket)
-	upload(ctx, bucketUrl, file)
+	uploader := uploaderBuilder{
+		platformPrefix: gcpPrefix,
+		bucketName:     bucket,
+		fileName:       file,
+	}
+	uploader.buildAndUpload(ctx)
 }
 
 func azure(ctx context.Context, bucket string, file string) {
-	var bucketUrl string
-	bucketUrl = fmt.Sprintf(urlTemplate, azurePrefix, bucket)
-	upload(ctx, bucketUrl, file)
+	uploader := uploaderBuilder{
+		platformPrefix: azurePrefix,
+		bucketName:     bucket,
+		fileName:       file,
+	}
+	uploader.buildAndUpload(ctx)
+}
+
+func local(ctx context.Context, bucket string, file string) {
+	uploader := uploaderBuilder{
+		platformPrefix: localPrefix,
+		bucketName:     bucket,
+		fileName:       file,
+	}
+	uploader.buildAndUpload(ctx)
+}
+
+// TODO: Verify safety...
+func all(ctx context.Context, bucket string, file string) {
+	go s3(ctx, bucket, file)
+	go gcp(ctx, bucket, file)
+	go azure(ctx, bucket, file)
+	if localBucketPath != "" {
+		go local(ctx, bucket, file)
+	}
 }
 
 func upload(ctx context.Context, bucketURL string, file string) {
@@ -223,6 +244,8 @@ func (u *uploaderBuilder) buildBucketUrl() *uploaderBuilder {
 	if u.awsRegion != "" {
 		regionQuery := fmt.Sprintf("?region=%s", awsRegion)
 		u.bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, u.bucketName+regionQuery)
+	} else if u.platformPrefix == localPrefix {
+		u.bucketUrl = fmt.Sprintf(urlTemplate, localPrefix, "/"+u.bucketName)
 	} else {
 		u.bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, u.bucketName)
 	}
