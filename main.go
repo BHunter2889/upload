@@ -8,6 +8,7 @@ import (
 	"gocloud.dev/blob"
 	// Import blank GoCDK blob impls for desired platform.
 	_ "gocloud.dev/blob/azureblob"
+	_ "gocloud.dev/blob/fileblob"
 	_ "gocloud.dev/blob/gcsblob"
 	_ "gocloud.dev/blob/s3blob"
 	"io/ioutil"
