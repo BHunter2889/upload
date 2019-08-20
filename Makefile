@@ -10,4 +10,4 @@ clean:
 
 .PHONY: deploy
 deploy: clean build
-	./upload local ~/bin upload
+	cp upload ~/bin/upload

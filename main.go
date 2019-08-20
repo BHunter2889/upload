@@ -87,7 +87,7 @@ func main() {
 		Use:   "local PATH_TO_BUCKET FILE",
 		Short: "The local subcommand locally 'uploads' FILE to PATH_TO_BUCKET.",
 		Long: `The local subcommand 'uploads' FILE to the local filesystem path defined by PATH_TO_BUCKET. ` +
-			`This is mainly useful for testing purposes but could be used in place of the 'cp' command, for example.`,
+			`This is mainly useful for testing purposes but could be used in place of the 'cp' command (for some file types), for example.`,
 		Args: cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			local(ctx, args[0], args[1])
@@ -134,6 +134,7 @@ func main() {
 
 func s3(ctx context.Context, bucket string, file string) {
 	uploader := uploaderBuilder{
+		platform:       "S3",
 		platformPrefix: s3Prefix,
 		awsRegion:      awsRegion,
 		bucketName:     bucket,
@@ -144,6 +145,7 @@ func s3(ctx context.Context, bucket string, file string) {
 
 func gcp(ctx context.Context, bucket string, file string) {
 	uploader := uploaderBuilder{
+		platform:       "GCS",
 		platformPrefix: gcpPrefix,
 		bucketName:     bucket,
 		fileName:       file,
@@ -153,6 +155,7 @@ func gcp(ctx context.Context, bucket string, file string) {
 
 func azure(ctx context.Context, bucket string, file string) {
 	uploader := uploaderBuilder{
+		platform:       "Azure",
 		platformPrefix: azurePrefix,
 		bucketName:     bucket,
 		fileName:       file,
@@ -162,6 +165,7 @@ func azure(ctx context.Context, bucket string, file string) {
 
 func local(ctx context.Context, bucket string, file string) {
 	uploader := uploaderBuilder{
+		platform:       "Local",
 		platformPrefix: localPrefix,
 		bucketName:     bucket,
 		fileName:       file,
@@ -216,6 +220,7 @@ func upload(ctx context.Context, bucketURL string, file string) {
 type uploaderBuilder struct {
 	bucketName     string
 	fileName       string
+	platform       string
 	platformPrefix string
 	bucketUrl      string
 	awsRegion      string
@@ -242,6 +247,7 @@ func (u *uploaderBuilder) inAWSRegion(region string) *uploaderBuilder {
 }
 
 func (u *uploaderBuilder) buildBucketUrl() *uploaderBuilder {
+	log.Println("Building URL for upload...")
 	if u.awsRegion != "" {
 		regionQuery := fmt.Sprintf("?region=%s", awsRegion)
 		u.bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, u.bucketName+regionQuery)
@@ -254,6 +260,7 @@ func (u *uploaderBuilder) buildBucketUrl() *uploaderBuilder {
 }
 
 func (u *uploaderBuilder) upload(ctx context.Context) {
+	log.Printf("Uploading %s to %s %s...", u.fileName, u.platform, u.bucketName)
 	upload(ctx, u.bucketUrl, u.fileName)
 }
 
