@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"gocloud.dev/blob"
+	"sync"
 	// Import blank GoCDK blob impls for desired platform.
 	_ "gocloud.dev/blob/azureblob"
 	_ "gocloud.dev/blob/fileblob"
@@ -27,8 +28,10 @@ var (
 	ctx             context.Context
 	awsRegion       string
 	localBucketPath string
+	wg              sync.WaitGroup
 )
 
+//noinspection GoUnhandledErrorResult
 func main() {
 	ctx = context.Background()
 
@@ -125,7 +128,7 @@ func main() {
 	// TODO: ***** Add subcmd flags to all to enable exclusion of a platform. *****
 	// TODO: ***** CONSIDER: Add flags to root upload to enable platform specification and individual naming. *****
 
-	uploadCmd.AddCommand(s3SubCmd, gcsSubCmd, azSubCmd, localSubCmd)
+	uploadCmd.AddCommand(s3SubCmd, gcsSubCmd, azSubCmd, localSubCmd, allSubCmd)
 	err := uploadCmd.Execute()
 	if err != nil {
 		log.Fatal("upload command failed to execute: ", err)
@@ -175,18 +178,22 @@ func local(ctx context.Context, bucket string, file string) {
 
 // TODO: Verify safety...
 func all(ctx context.Context, bucket string, file string) {
+	wg.Add(3)
 	go s3(ctx, bucket, file)
 	go gcp(ctx, bucket, file)
 	go azure(ctx, bucket, file)
 	if localBucketPath != "" {
-		go local(ctx, bucket, file)
+		wg.Add(1)
+		go local(ctx, localBucketPath, file)
 	}
+	wg.Wait()
 }
 
-func upload(ctx context.Context, bucketURL string, file string) {
+func upload(ctx context.Context, bucketURL string, file string) (error error) {
 	//	Open Bucket Connection
 	bucket, err := blob.OpenBucket(ctx, bucketURL)
 	if err != nil {
+		error = err
 		log.Fatalf("Failed to setup bucket: %s", err)
 	}
 	defer bucket.Close()
@@ -194,27 +201,33 @@ func upload(ctx context.Context, bucketURL string, file string) {
 	//	Prepare File for upload.
 	data, err := ioutil.ReadFile(file)
 	if err != nil {
+		error = err
 		log.Fatalf("Failed to read file: %s", err)
 	}
 
 	// To write the file to the bucket, you can do this:
 	writer, err := bucket.NewWriter(ctx, file, nil)
 	if err != nil {
+		error = err
 		log.Fatalf("Failed to obtain writer: %s", err)
 	}
 
 	_, err = writer.Write(data)
 	if err != nil {
+		error = err
 		log.Fatalf("Failed to write to bucket: %s", err)
 	}
 	if err := writer.Close(); err != nil {
+		error = err
 		log.Fatalf("Failed to close: %s", err)
 	}
+
 	//	Or alternatively use this shortcut at the expense of explicit error handling:
 	//	err = bucket.WriteAll(ctx, file, data, nil);
 	//if err != nil {
 	//	log.Fatalf("Writer Failed: ", err)
 	//}
+	return
 }
 
 type uploaderBuilder struct {
@@ -247,7 +260,7 @@ func (u *uploaderBuilder) inAWSRegion(region string) *uploaderBuilder {
 }
 
 func (u *uploaderBuilder) buildBucketUrl() *uploaderBuilder {
-	log.Println("Building URL for upload...")
+	log.Printf("Preparing for %s upload...", u.platform)
 	if u.awsRegion != "" {
 		regionQuery := fmt.Sprintf("?region=%s", awsRegion)
 		u.bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, u.bucketName+regionQuery)
@@ -261,7 +274,10 @@ func (u *uploaderBuilder) buildBucketUrl() *uploaderBuilder {
 
 func (u *uploaderBuilder) upload(ctx context.Context) {
 	log.Printf("Uploading %s to %s %s...", u.fileName, u.platform, u.bucketName)
-	upload(ctx, u.bucketUrl, u.fileName)
+	if err := upload(ctx, u.bucketUrl, u.fileName); err != nil {
+		log.Printf("Failed to upload to %s with error: %v", u.platform, err)
+	}
+	wg.Done()
 }
 
 func (u *uploaderBuilder) buildAndUpload(ctx context.Context) {
