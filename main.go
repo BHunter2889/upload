@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"gocloud.dev/blob"
+	"sync"
 	// Import blank GoCDK blob impls for desired platform.
 	_ "gocloud.dev/blob/azureblob"
+	_ "gocloud.dev/blob/fileblob"
 	_ "gocloud.dev/blob/gcsblob"
 	_ "gocloud.dev/blob/s3blob"
 	"io/ioutil"
@@ -19,13 +21,17 @@ const (
 	s3Prefix    = "s3"
 	gcpPrefix   = "gs"
 	azurePrefix = "azblob"
+	localPrefix = "file"
 )
 
 var (
-	ctx       context.Context
-	awsRegion string
+	ctx             context.Context
+	awsRegion       string
+	localBucketPath string
+	wg              sync.WaitGroup
 )
 
+//noinspection GoUnhandledErrorResult
 func main() {
 	ctx = context.Background()
 
@@ -47,13 +53,7 @@ func main() {
 			`(or optionally provided) AWS environment variables.`,
 		Args: cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			uploader := uploaderBuilder{
-				platformPrefix: s3Prefix,
-				awsRegion:      awsRegion,
-				bucketName:     args[0],
-				fileName:       args[1],
-			}
-			uploader.buildAndUpload(ctx)
+			s3(ctx, args[0], args[1])
 		},
 	}
 
@@ -71,12 +71,7 @@ func main() {
 		Long:  `The gcs subcommand auto-constructs the GCP GCS route to the named bucket using the gcloud configuration. `,
 		Args:  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			uploader := uploaderBuilder{
-				platformPrefix: gcpPrefix,
-				bucketName:     args[0],
-				fileName:       args[1],
-			}
-			uploader.buildAndUpload(ctx)
+			gcp(ctx, args[0], args[1])
 		},
 	}
 
@@ -87,16 +82,53 @@ func main() {
 			`AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY environment variable configuration.`,
 		Args: cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			uploader := uploaderBuilder{
-				platformPrefix: azurePrefix,
-				bucketName:     args[0],
-				fileName:       args[1],
-			}
-			uploader.buildAndUpload(ctx)
+			azure(ctx, args[0], args[1])
 		},
 	}
 
-	uploadCmd.AddCommand(s3SubCmd, gcsSubCmd, azSubCmd)
+	localSubCmd := &cobra.Command{
+		Use:   "local PATH_TO_BUCKET FILE",
+		Short: "The local subcommand locally 'uploads' FILE to PATH_TO_BUCKET.",
+		Long: `The local subcommand 'uploads' FILE to the local filesystem path defined by PATH_TO_BUCKET. ` +
+			`This is mainly useful for testing purposes but could be used in place of the 'cp' command (for some file types), for example.`,
+		Args: cobra.MinimumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			local(ctx, args[0], args[1])
+		},
+	}
+
+	allSubCmd := &cobra.Command{
+		Use:   "all 'BUCKET_NAME' FILE",
+		Short: "The 'all' subcommand auto-constructs the routes to all 3 platforms to the named bucket using the respective env vars.",
+		Long: `The 'all'' subcommand auto-constructs the routes to AWS S3, GCS, and Azure named bucket/container using the configured ` +
+			` environment variables. Bucket/container must have same name across all 3 platforms for standard (non-flagged) usage.`,
+		Args: cobra.MinimumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			all(ctx, args[0], args[1])
+		},
+	}
+
+	allSubCmd.Flags().StringVarP(
+		&awsRegion,
+		"region",
+		"r",
+		"",
+		"The AWS Region where the named bucket is located. "+
+			"Overrides any default region previously set.")
+
+	allSubCmd.Flags().StringVarP(
+		&localBucketPath,
+		"local",
+		"l",
+		"",
+		"Also upload locally. The provided argument is the `PATH_TO_BUCKET` locally. "+
+			"See `upload local --help` for the same usage.")
+
+	// TODO: ***** Add subcmd flags to all to enable individually named buckets. *****
+	// TODO: ***** Add subcmd flags to all to enable exclusion of a platform. *****
+	// TODO: ***** CONSIDER: Add flags to root upload to enable platform specification and individual naming. *****
+
+	uploadCmd.AddCommand(s3SubCmd, gcsSubCmd, azSubCmd, localSubCmd, allSubCmd)
 	err := uploadCmd.Execute()
 	if err != nil {
 		log.Fatal("upload command failed to execute: ", err)
@@ -104,33 +136,64 @@ func main() {
 }
 
 func s3(ctx context.Context, bucket string, file string) {
-	var bucketUrl string
-
-	if awsRegion != "" {
-		regionQuery := fmt.Sprintf("?region=%s", awsRegion)
-		bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, bucket+regionQuery)
-	} else {
-		bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, bucket)
+	uploader := uploaderBuilder{
+		platform:       "S3",
+		platformPrefix: s3Prefix,
+		awsRegion:      awsRegion,
+		bucketName:     bucket,
+		fileName:       file,
 	}
-	upload(ctx, bucketUrl, file)
+	uploader.buildAndUpload(ctx)
 }
 
 func gcp(ctx context.Context, bucket string, file string) {
-	var bucketUrl string
-	bucketUrl = fmt.Sprintf(urlTemplate, gcpPrefix, bucket)
-	upload(ctx, bucketUrl, file)
+	uploader := uploaderBuilder{
+		platform:       "GCS",
+		platformPrefix: gcpPrefix,
+		bucketName:     bucket,
+		fileName:       file,
+	}
+	uploader.buildAndUpload(ctx)
 }
 
 func azure(ctx context.Context, bucket string, file string) {
-	var bucketUrl string
-	bucketUrl = fmt.Sprintf(urlTemplate, azurePrefix, bucket)
-	upload(ctx, bucketUrl, file)
+	uploader := uploaderBuilder{
+		platform:       "Azure",
+		platformPrefix: azurePrefix,
+		bucketName:     bucket,
+		fileName:       file,
+	}
+	uploader.buildAndUpload(ctx)
 }
 
-func upload(ctx context.Context, bucketURL string, file string) {
+func local(ctx context.Context, bucket string, file string) {
+	uploader := uploaderBuilder{
+		platform:       "Local",
+		platformPrefix: localPrefix,
+		bucketName:     bucket,
+		fileName:       file,
+	}
+	uploader.buildAndUpload(ctx)
+}
+
+// TODO: Verify safety...
+func all(ctx context.Context, bucket string, file string) {
+	wg.Add(3)
+	go s3(ctx, bucket, file)
+	go gcp(ctx, bucket, file)
+	go azure(ctx, bucket, file)
+	if localBucketPath != "" {
+		wg.Add(1)
+		go local(ctx, localBucketPath, file)
+	}
+	wg.Wait()
+}
+
+func upload(ctx context.Context, bucketURL string, file string) (error error) {
 	//	Open Bucket Connection
 	bucket, err := blob.OpenBucket(ctx, bucketURL)
 	if err != nil {
+		error = err
 		log.Fatalf("Failed to setup bucket: %s", err)
 	}
 	defer bucket.Close()
@@ -138,32 +201,39 @@ func upload(ctx context.Context, bucketURL string, file string) {
 	//	Prepare File for upload.
 	data, err := ioutil.ReadFile(file)
 	if err != nil {
+		error = err
 		log.Fatalf("Failed to read file: %s", err)
 	}
 
 	// To write the file to the bucket, you can do this:
 	writer, err := bucket.NewWriter(ctx, file, nil)
 	if err != nil {
+		error = err
 		log.Fatalf("Failed to obtain writer: %s", err)
 	}
 
 	_, err = writer.Write(data)
 	if err != nil {
+		error = err
 		log.Fatalf("Failed to write to bucket: %s", err)
 	}
 	if err := writer.Close(); err != nil {
+		error = err
 		log.Fatalf("Failed to close: %s", err)
 	}
+
 	//	Or alternatively use this shortcut at the expense of explicit error handling:
 	//	err = bucket.WriteAll(ctx, file, data, nil);
 	//if err != nil {
 	//	log.Fatalf("Writer Failed: ", err)
 	//}
+	return
 }
 
 type uploaderBuilder struct {
 	bucketName     string
 	fileName       string
+	platform       string
 	platformPrefix string
 	bucketUrl      string
 	awsRegion      string
@@ -190,9 +260,12 @@ func (u *uploaderBuilder) inAWSRegion(region string) *uploaderBuilder {
 }
 
 func (u *uploaderBuilder) buildBucketUrl() *uploaderBuilder {
+	log.Printf("Preparing for %s upload...", u.platform)
 	if u.awsRegion != "" {
 		regionQuery := fmt.Sprintf("?region=%s", awsRegion)
 		u.bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, u.bucketName+regionQuery)
+	} else if u.platformPrefix == localPrefix {
+		u.bucketUrl = fmt.Sprintf(urlTemplate, localPrefix, "/"+u.bucketName)
 	} else {
 		u.bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, u.bucketName)
 	}
@@ -200,7 +273,11 @@ func (u *uploaderBuilder) buildBucketUrl() *uploaderBuilder {
 }
 
 func (u *uploaderBuilder) upload(ctx context.Context) {
-	upload(ctx, u.bucketUrl, u.fileName)
+	log.Printf("Uploading %s to %s %s...", u.fileName, u.platform, u.bucketName)
+	if err := upload(ctx, u.bucketUrl, u.fileName); err != nil {
+		log.Printf("Failed to upload to %s with error: %v", u.platform, err)
+	}
+	wg.Done()
 }
 
 func (u *uploaderBuilder) buildAndUpload(ctx context.Context) {
