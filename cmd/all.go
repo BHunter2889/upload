@@ -5,6 +5,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TODO: ***** Add subcmd flags to all to enable individually named buckets. *****
+// TODO: ***** Add subcmd flags to all to enable exclusion of a platform. *****
 func init() {
 	allSubCmd.Flags().StringVarP(
 		&awsRegion,
@@ -36,7 +38,7 @@ var allSubCmd = &cobra.Command{
 	},
 }
 
-// TODO: Verify safety...
+// TODO: Probably consider handling this context better...
 func all(ctx context.Context, bucket string, file string) {
 	wg.Add(3)
 	go s3(ctx, bucket, file)

@@ -29,6 +29,17 @@ var (
 	wg              sync.WaitGroup
 )
 
+// TODO: ***** CONSIDER: Add flags to root upload to enable platform specification and individual naming. *****
+func init() {
+	ctx = context.Background()
+}
+
+func Execute() {
+	if err := uploadCmd.Execute(); err != nil {
+		log.Fatalf("Could not execute 'upload' command: %s", err)
+	}
+}
+
 var uploadCmd = &cobra.Command{
 	Use:   "upload 'BUCKET_URL' FILE",
 	Short: "upload is a util to upload to any cloud platform storage bucket provider",
@@ -40,16 +51,6 @@ var uploadCmd = &cobra.Command{
 			log.Fatalf("Upload to %s failed with error: %s", args[0], err)
 		}
 	},
-}
-
-func init() {
-	ctx = context.Background()
-}
-
-func Execute() {
-	if err := uploadCmd.Execute(); err != nil {
-		log.Fatalf("Could not execute 'upload' command: %s", err)
-	}
 }
 
 func upload(ctx context.Context, bucketURL string, file string) (error error) {
