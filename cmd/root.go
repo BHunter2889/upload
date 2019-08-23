@@ -27,6 +27,7 @@ var (
 	localBucketPath string
 )
 
+// TODO: Impl cobra command.Print() etc. logging.
 // TODO: ***** CONSIDER: Add flags to root upload to enable platform specification and individual naming. *****
 func init() {
 	ctx = context.Background()

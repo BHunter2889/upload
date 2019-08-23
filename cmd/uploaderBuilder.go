@@ -37,7 +37,7 @@ func (u *uploaderBuilder) inAWSRegion(region string) *uploaderBuilder {
 }
 
 func (u *uploaderBuilder) buildBucketUrl() *uploaderBuilder {
-	log.Printf("Preparing for %s upload...", u.platform)
+	log.Printf("Preparing for %s upload... \n", u.platform)
 	if u.awsRegion != "" {
 		regionQuery := fmt.Sprintf("?region=%s", awsRegion)
 		u.bucketUrl = fmt.Sprintf(urlTemplate, s3Prefix, u.bucketName+regionQuery)
@@ -53,6 +53,8 @@ func (u *uploaderBuilder) upload(ctx context.Context) {
 	log.Printf("Uploading %s to %s %s...", u.fileName, u.platform, u.bucketName)
 	if err := upload(ctx, u.bucketUrl, u.fileName); err != nil {
 		log.Printf("Failed to upload to %s with error: %v", u.platform, err)
+	} else {
+		log.Print(" Done.")
 	}
 }
 
