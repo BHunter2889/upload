@@ -11,7 +11,6 @@ import (
 	_ "gocloud.dev/blob/s3blob"
 	"io/ioutil"
 	"log"
-	"sync"
 )
 
 const (
@@ -26,7 +25,6 @@ var (
 	ctx             context.Context
 	awsRegion       string
 	localBucketPath string
-	wg              sync.WaitGroup
 )
 
 // TODO: ***** CONSIDER: Add flags to root upload to enable platform specification and individual naming. *****

@@ -38,15 +38,11 @@ var allSubCmd = &cobra.Command{
 	},
 }
 
-// TODO: Probably consider handling this context better...
 func all(ctx context.Context, bucket string, file string) {
-	wg.Add(3)
-	go s3(ctx, bucket, file)
-	go gcp(ctx, bucket, file)
-	go azure(ctx, bucket, file)
+	s3(ctx, bucket, file)
+	gcp(ctx, bucket, file)
+	azure(ctx, bucket, file)
 	if localBucketPath != "" {
-		wg.Add(1)
-		go local(ctx, localBucketPath, file)
+		local(ctx, localBucketPath, file)
 	}
-	wg.Wait()
 }

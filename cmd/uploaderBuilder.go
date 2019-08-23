@@ -54,7 +54,6 @@ func (u *uploaderBuilder) upload(ctx context.Context) {
 	if err := upload(ctx, u.bucketUrl, u.fileName); err != nil {
 		log.Printf("Failed to upload to %s with error: %v", u.platform, err)
 	}
-	wg.Done()
 }
 
 func (u *uploaderBuilder) buildAndUpload(ctx context.Context) {
