@@ -56,6 +56,7 @@ func (u *uploaderBuilder) upload(ctx context.Context) {
 	} else {
 		log.Print(" Done.")
 	}
+	wg.Done()
 }
 
 func (u *uploaderBuilder) buildAndUpload(ctx context.Context) {

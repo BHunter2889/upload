@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 	"github.com/spf13/cobra"
+	"sync"
 )
+
+var wg sync.WaitGroup
 
 // TODO: ***** Add subcmd flags to all to enable individually named buckets. *****
 // TODO: ***** Add subcmd flags to all to enable exclusion of a platform. *****
@@ -38,11 +41,15 @@ var allSubCmd = &cobra.Command{
 	},
 }
 
+// TODO: Probably consider handling this context better...
 func all(ctx context.Context, bucket string, file string) {
-	s3(ctx, bucket, file)
-	gcp(ctx, bucket, file)
-	azure(ctx, bucket, file)
+	wg.Add(3)
+	go s3(ctx, bucket, file)
+	go gcp(ctx, bucket, file)
+	go azure(ctx, bucket, file)
 	if localBucketPath != "" {
-		local(ctx, localBucketPath, file)
+		wg.Add(1)
+		go local(ctx, localBucketPath, file)
 	}
+	wg.Wait()
 }
